@@ -1,11 +1,17 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, Search, Filter, Tag } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Filter, Tag, ArrowRight } from 'lucide-react';
 import { useStore } from '../store/useStore.js';
 import Modal from '../components/Modal.js';
 import StatusBadge from '../components/StatusBadge.js';
 import ConfirmDialog from '../components/ConfirmDialog.js';
 import type { Product, ProductStatus } from '../../shared/types.js';
-import { productStatusLabels, categories } from '../../shared/types.js';
+import {
+  productStatusLabels,
+  categories,
+  getNextProductStatuses,
+  productStatusTransitions,
+  productStatusTransitionLabels,
+} from '../../shared/types.js';
 
 const formatDate = (dateStr: string) => {
   return new Date(dateStr).toLocaleDateString('zh-CN');
@@ -16,6 +22,8 @@ const getTodayDate = () => {
   return today.toISOString().split('T')[0];
 };
 
+const getTransitionKey = (from: ProductStatus, to: ProductStatus) => `${from}->${to}`;
+
 export default function Products() {
   const { products, demands, fetchProducts, fetchDemands, createProduct, updateProduct, deleteProduct, loading } = useStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -25,6 +33,7 @@ export default function Products() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProductStatus | 'all'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -54,6 +63,7 @@ export default function Products() {
   });
 
   const handleOpenModal = (product?: Product) => {
+    setStatusError(null);
     if (product) {
       setEditingProduct(product);
       setFormData({
@@ -89,10 +99,12 @@ export default function Products() {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingProduct(null);
+    setStatusError(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setStatusError(null);
     
     const submitData = {
       ...formData,
@@ -104,12 +116,23 @@ export default function Products() {
     let success = false;
     if (editingProduct) {
       success = await updateProduct(editingProduct.id, submitData);
+      if (!success) {
+        setStatusError('状态流转不合法，请按流程操作');
+      }
     } else {
       success = await createProduct(submitData);
     }
 
     if (success) {
       handleCloseModal();
+    }
+  };
+
+  const handleStatusTransition = async (product: Product, newStatus: ProductStatus) => {
+    const success = await updateProduct(product.id, { status: newStatus });
+    if (!success) {
+      setStatusError('状态流转失败');
+      setTimeout(() => setStatusError(null), 3000);
     }
   };
 
@@ -128,8 +151,18 @@ export default function Products() {
   const profit = formData.sellingPrice - formData.purchasePrice;
   const profitRate = formData.purchasePrice > 0 ? ((profit / formData.purchasePrice) * 100).toFixed(1) : '0';
 
+  const availableStatuses = editingProduct
+    ? [editingProduct.status, ...productStatusTransitions[editingProduct.status]]
+    : Object.keys(productStatusLabels) as ProductStatus[];
+
   return (
     <div className="space-y-6">
+      {statusError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+          {statusError}
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">商品列表管理</h2>
@@ -211,6 +244,9 @@ export default function Products() {
                   状态
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  状态操作
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   关联需求
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -222,6 +258,8 @@ export default function Products() {
               {filteredProducts.map((product) => {
                 const productProfit = product.sellingPrice - product.purchasePrice;
                 const demand = demands.find((d) => d.id === product.demandId);
+                const nextStatuses = getNextProductStatuses(product.status);
+                const isTerminal = nextStatuses.length === 0;
                 
                 return (
                   <tr key={product.id} className="hover:bg-gray-50 transition-colors">
@@ -255,6 +293,29 @@ export default function Products() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <StatusBadge status={product.status} type="product" />
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {isTerminal ? (
+                        <span className="text-xs text-gray-400">流程已结束</span>
+                      ) : (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {nextStatuses.map((nextStatus) => {
+                            const key = getTransitionKey(product.status, nextStatus);
+                            const label = productStatusTransitionLabels[key] || productStatusLabels[nextStatus];
+                            return (
+                              <button
+                                key={nextStatus}
+                                onClick={() => handleStatusTransition(product, nextStatus)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md transition-colors bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200"
+                                title={`${productStatusLabels[product.status]} → ${productStatusLabels[nextStatus]}`}
+                              >
+                                <ArrowRight className="w-3 h-3" />
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {demand ? demand.customerName : '-'}
                     </td>
@@ -281,13 +342,25 @@ export default function Products() {
               })}
               {filteredProducts.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
                     暂无数据
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">商品状态流转规则</h3>
+        <div className="flex items-center gap-2 flex-wrap text-sm">
+          {(['pending', 'purchased', 'shipped', 'delivered'] as ProductStatus[]).map((status, idx) => (
+            <span key={status} className="flex items-center gap-2">
+              <StatusBadge status={status} type="product" />
+              {idx < 3 && <ArrowRight className="w-4 h-4 text-gray-400" />}
+            </span>
+          ))}
         </div>
       </div>
 
@@ -402,17 +475,31 @@ export default function Products() {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 状态
               </label>
-              <select
-                value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value as ProductStatus })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-              >
-                {Object.entries(productStatusLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
+              {editingProduct ? (
+                <div>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value as ProductStatus })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                  >
+                    {availableStatuses.map((value) => (
+                      <option key={value} value={value}>
+                        {productStatusLabels[value]}
+                        {value === editingProduct.status ? '（当前）' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {editingProduct.status !== 'pending' && (
+                    <p className="mt-1 text-xs text-gray-500">
+                      状态只能按流程流转，当前可流转至：{productStatusTransitions[editingProduct.status].map(s => productStatusLabels[s]).join('、') || '无'}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-500 text-sm">
+                  新建商品默认为「待采购」状态
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">

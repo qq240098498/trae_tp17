@@ -1,5 +1,6 @@
 import express, { type Request, type Response } from 'express';
 import { store } from '../data/store.js';
+import { canTransitionProductStatus } from '../../shared/types.js';
 import type { ProductStatus } from '../../shared/types.js';
 
 const router = express.Router();
@@ -78,6 +79,17 @@ router.put('/:id', (req: Request, res: Response) => {
       error: '商品不存在',
     });
     return;
+  }
+  
+  if (req.body.status && req.body.status !== product.status) {
+    const newStatus = req.body.status as ProductStatus;
+    if (!canTransitionProductStatus(product.status, newStatus)) {
+      res.status(400).json({
+        success: false,
+        error: `状态不能从"${product.status}"变更为"${newStatus}"`,
+      });
+      return;
+    }
   }
   
   const updatedProduct = store.products.update(req.params.id, req.body);

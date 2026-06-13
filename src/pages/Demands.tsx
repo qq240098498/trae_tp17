@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, Search, Filter } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Filter, ArrowRight, Ban } from 'lucide-react';
 import { useStore } from '../store/useStore.js';
 import Modal from '../components/Modal.js';
 import StatusBadge from '../components/StatusBadge.js';
 import ConfirmDialog from '../components/ConfirmDialog.js';
 import type { Demand, DemandStatus } from '../../shared/types.js';
-import { statusLabels } from '../../shared/types.js';
+import {
+  statusLabels,
+  getNextDemandStatuses,
+  demandStatusTransitions,
+  demandStatusTransitionLabels,
+} from '../../shared/types.js';
 
 const formatDate = (dateStr: string) => {
   return new Date(dateStr).toLocaleDateString('zh-CN');
@@ -22,6 +27,8 @@ const getDefaultDeadline = () => {
   return date.toISOString().split('T')[0];
 };
 
+const getTransitionKey = (from: DemandStatus, to: DemandStatus) => `${from}->${to}`;
+
 export default function Demands() {
   const { demands, fetchDemands, createDemand, updateDemand, deleteDemand, loading } = useStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -30,6 +37,7 @@ export default function Demands() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<DemandStatus | 'all'>('all');
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     customerName: '',
@@ -56,6 +64,7 @@ export default function Demands() {
   });
 
   const handleOpenModal = (demand?: Demand) => {
+    setStatusError(null);
     if (demand) {
       setEditingDemand(demand);
       setFormData({
@@ -87,20 +96,33 @@ export default function Demands() {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingDemand(null);
+    setStatusError(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    setStatusError(null);
+
     let success = false;
     if (editingDemand) {
       success = await updateDemand(editingDemand.id, formData);
+      if (!success) {
+        setStatusError('状态流转不合法，请按流程操作');
+      }
     } else {
       success = await createDemand(formData);
     }
 
     if (success) {
       handleCloseModal();
+    }
+  };
+
+  const handleStatusTransition = async (demand: Demand, newStatus: DemandStatus) => {
+    const success = await updateDemand(demand.id, { status: newStatus });
+    if (!success) {
+      setStatusError('状态流转失败');
+      setTimeout(() => setStatusError(null), 3000);
     }
   };
 
@@ -116,8 +138,18 @@ export default function Demands() {
     }
   };
 
+  const availableStatuses = editingDemand
+    ? [editingDemand.status, ...demandStatusTransitions[editingDemand.status]]
+    : Object.keys(statusLabels) as DemandStatus[];
+
   return (
     <div className="space-y-6">
+      {statusError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+          {statusError}
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">代购需求管理</h2>
@@ -181,6 +213,9 @@ export default function Demands() {
                   状态
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  状态操作
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   创建时间
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -189,62 +224,110 @@ export default function Demands() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {filteredDemands.map((demand) => (
-                <tr key={demand.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="font-medium text-gray-900">{demand.customerName}</div>
-                    <div className="text-sm text-gray-500">{demand.customerPhone}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="font-medium text-gray-900">{demand.productName}</div>
-                    {demand.description && (
-                      <div className="text-sm text-gray-500 truncate max-w-[200px]" title={demand.description}>
-                        {demand.description}
+              {filteredDemands.map((demand) => {
+                const nextStatuses = getNextDemandStatuses(demand.status);
+                const isTerminal = nextStatuses.length === 0;
+
+                return (
+                  <tr key={demand.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="font-medium text-gray-900">{demand.customerName}</div>
+                      <div className="text-sm text-gray-500">{demand.customerPhone}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="font-medium text-gray-900">{demand.productName}</div>
+                      {demand.description && (
+                        <div className="text-sm text-gray-500 truncate max-w-[200px]" title={demand.description}>
+                          {demand.description}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-gray-900">x{demand.quantity}</div>
+                      <div className="text-sm text-gray-500">¥{demand.budget.toLocaleString()}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-600">
+                      {formatDate(demand.deadline)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <StatusBadge status={demand.status} type="demand" />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {isTerminal ? (
+                        <span className="text-xs text-gray-400">流程已结束</span>
+                      ) : (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {nextStatuses.map((nextStatus) => {
+                            const key = getTransitionKey(demand.status, nextStatus);
+                            const label = demandStatusTransitionLabels[key] || statusLabels[nextStatus];
+                            const isCancel = nextStatus === 'cancelled';
+                            return (
+                              <button
+                                key={nextStatus}
+                                onClick={() => handleStatusTransition(demand, nextStatus)}
+                                className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                                  isCancel
+                                    ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'
+                                    : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200'
+                                }`}
+                                title={`${statusLabels[demand.status]} → ${statusLabels[nextStatus]}`}
+                              >
+                                {isCancel ? <Ban className="w-3 h-3" /> : <ArrowRight className="w-3 h-3" />}
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {formatDate(demand.createdAt)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleOpenModal(demand)}
+                          className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                          title="编辑"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(demand.id)}
+                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="删除"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-gray-900">x{demand.quantity}</div>
-                    <div className="text-sm text-gray-500">¥{demand.budget.toLocaleString()}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-gray-600">
-                    {formatDate(demand.deadline)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <StatusBadge status={demand.status} type="demand" />
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {formatDate(demand.createdAt)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => handleOpenModal(demand)}
-                        className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                        title="编辑"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(demand.id)}
-                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="删除"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                );
+              })}
               {filteredDemands.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
                     暂无数据
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">需求状态流转规则</h3>
+        <div className="flex items-center gap-2 flex-wrap text-sm">
+          {(['pending', 'purchasing', 'shipping', 'completed'] as DemandStatus[]).map((status, idx) => (
+            <span key={status} className="flex items-center gap-2">
+              <StatusBadge status={status} type="demand" />
+              {idx < 3 && <ArrowRight className="w-4 h-4 text-gray-400" />}
+            </span>
+          ))}
+          <span className="mx-2 text-gray-300">|</span>
+          <span className="text-xs text-gray-500">待处理/采购中/运输中 可</span>
+          <StatusBadge status="cancelled" type="demand" />
         </div>
       </div>
 
@@ -299,17 +382,31 @@ export default function Demands() {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 状态
               </label>
-              <select
-                value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value as DemandStatus })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-              >
-                {Object.entries(statusLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
+              {editingDemand ? (
+                <div>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value as DemandStatus })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                  >
+                    {availableStatuses.map((value) => (
+                      <option key={value} value={value}>
+                        {statusLabels[value]}
+                        {value === editingDemand.status ? '（当前）' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {editingDemand.status !== 'pending' && (
+                    <p className="mt-1 text-xs text-gray-500">
+                      状态只能按流程流转，当前可流转至：{demandStatusTransitions[editingDemand.status].map(s => statusLabels[s]).join('、') || '无'}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-500 text-sm">
+                  新建需求默认为「待处理」状态
+                </div>
+              )}
             </div>
           </div>
 

@@ -1,5 +1,6 @@
 import express, { type Request, type Response } from 'express';
 import { store } from '../data/store.js';
+import { canTransitionDemandStatus } from '../../shared/types.js';
 import type { Demand, DemandStatus } from '../../shared/types.js';
 
 const router = express.Router();
@@ -70,6 +71,17 @@ router.put('/:id', (req: Request, res: Response) => {
       error: '需求不存在',
     });
     return;
+  }
+  
+  if (req.body.status && req.body.status !== demand.status) {
+    const newStatus = req.body.status as DemandStatus;
+    if (!canTransitionDemandStatus(demand.status, newStatus)) {
+      res.status(400).json({
+        success: false,
+        error: `状态不能从"${demand.status}"变更为"${newStatus}"`,
+      });
+      return;
+    }
   }
   
   const updatedDemand = store.demands.update(req.params.id, req.body);

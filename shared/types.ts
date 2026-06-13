@@ -87,4 +87,50 @@ export const expenseTypeLabels: Record<ExpenseType, string> = {
   other: '其他',
 };
 
+export const demandStatusTransitions: Record<DemandStatus, DemandStatus[]> = {
+  pending: ['purchasing', 'cancelled'],
+  purchasing: ['shipping', 'cancelled'],
+  shipping: ['completed', 'cancelled'],
+  completed: [],
+  cancelled: [],
+};
+
+export const productStatusTransitions: Record<ProductStatus, ProductStatus[]> = {
+  pending: ['purchased'],
+  purchased: ['shipped'],
+  shipped: ['delivered'],
+  delivered: [],
+};
+
+export const demandStatusTransitionLabels: Record<string, string> = {
+  'pending->purchasing': '开始采购',
+  'purchasing->shipping': '发货',
+  'shipping->completed': '确认完成',
+  'pending->cancelled': '取消订单',
+  'purchasing->cancelled': '取消订单',
+  'shipping->cancelled': '取消订单',
+};
+
+export const productStatusTransitionLabels: Record<string, string> = {
+  'pending->purchased': '确认采购',
+  'purchased->shipped': '发货',
+  'shipped->delivered': '确认送达',
+};
+
+export function canTransitionDemandStatus(from: DemandStatus, to: DemandStatus): boolean {
+  return demandStatusTransitions[from].includes(to);
+}
+
+export function canTransitionProductStatus(from: ProductStatus, to: ProductStatus): boolean {
+  return productStatusTransitions[from].includes(to);
+}
+
+export function getNextDemandStatuses(current: DemandStatus): DemandStatus[] {
+  return demandStatusTransitions[current];
+}
+
+export function getNextProductStatuses(current: ProductStatus): ProductStatus[] {
+  return productStatusTransitions[current];
+}
+
 export const categories = ['电子产品', '美妆护肤', '服装鞋包', '母婴用品', '食品保健品', '家居用品', '其他'];
