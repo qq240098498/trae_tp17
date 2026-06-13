@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, Search, Tag, Percent, Calendar, Users, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Tag, Percent, Calendar, Users, CheckCircle, XCircle, Clock, Layers } from 'lucide-react';
 import { useStore } from '../store/useStore.js';
 import Modal from '../components/Modal.js';
 import ConfirmDialog from '../components/ConfirmDialog.js';
-import type { Promotion, PromotionStatus } from '../../shared/types.js';
-import { promotionStatusLabels } from '../../shared/types.js';
+import type { Promotion, PromotionStatus, PromotionType } from '../../shared/types.js';
+import { promotionStatusLabels, promotionTypeLabels } from '../../shared/types.js';
 
 const formatDate = (dateStr: string) => {
   return new Date(dateStr).toLocaleDateString('zh-CN');
@@ -55,6 +55,7 @@ export default function Promotions() {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
+    type: 'full_reduction' as PromotionType,
     minAmount: 0,
     discountAmount: 0,
     startDate: getTodayDate(),

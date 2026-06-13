@@ -1,6 +1,6 @@
 import express, { type Request, type Response } from 'express';
 import { store } from '../data/store.js';
-import type { Promotion, PromotionStatus } from '../../shared/types.js';
+import type { Promotion, PromotionStatus, PromotionType } from '../../shared/types.js';
 
 const router = express.Router();
 
@@ -23,7 +23,7 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 router.get('/applicable', (req: Request, res: Response) => {
-  const { amount } = req.query;
+  const { amount, phone } = req.query;
   const totalAmount = Number(amount);
 
   if (!amount || isNaN(totalAmount) || totalAmount < 0) {
@@ -41,9 +41,21 @@ router.get('/applicable', (req: Request, res: Response) => {
     return true;
   }).sort((a, b) => b.discountAmount - a.discountAmount);
 
+  let usedTypesThisMonth: PromotionType[] = [];
+  if (phone && typeof phone === 'string') {
+    const types = new Set<PromotionType>();
+    applicable.forEach(p => {
+      if (store.promotions.hasUserUsedTypeThisMonth(phone, p.type)) {
+        types.add(p.type);
+      }
+    });
+    usedTypesThisMonth = Array.from(types);
+  }
+
   res.json({
     success: true,
     data: applicable,
+    usedTypesThisMonth,
   });
 });
 

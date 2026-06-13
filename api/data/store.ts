@@ -426,6 +426,7 @@ export const mockPromotions: Promotion[] = [
     id: generateId(),
     name: '新人专享满减',
     description: '新用户首单满500减50',
+    type: 'new_user',
     minAmount: 500,
     discountAmount: 50,
     startDate: formatDate(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)),
@@ -439,6 +440,7 @@ export const mockPromotions: Promotion[] = [
     id: generateId(),
     name: '满1000减100',
     description: '订单满1000元立减100元',
+    type: 'full_reduction',
     minAmount: 1000,
     discountAmount: 100,
     startDate: formatDate(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)),
@@ -452,6 +454,7 @@ export const mockPromotions: Promotion[] = [
     id: generateId(),
     name: '满2000减250',
     description: '大额订单优惠，满2000减250',
+    type: 'full_reduction',
     minAmount: 2000,
     discountAmount: 250,
     startDate: formatDate(new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)),
@@ -459,12 +462,13 @@ export const mockPromotions: Promotion[] = [
     status: 'active',
     usageLimit: 200,
     usedCount: 8,
-    createdAt: daysAgo(3),
+    createdAt: daysAgo(1),
   },
   {
     id: generateId(),
     name: '满5000减800',
     description: '超值大优惠，满5000减800',
+    type: 'full_reduction',
     minAmount: 5000,
     discountAmount: 800,
     startDate: formatDate(new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000)),
@@ -478,6 +482,7 @@ export const mockPromotions: Promotion[] = [
     id: generateId(),
     name: '双十一特惠',
     description: '双十一专属满3000减500',
+    type: 'festival',
     minAmount: 3000,
     discountAmount: 500,
     startDate: formatDate(new Date(now.getTime() - 200 * 24 * 60 * 60 * 1000)),
@@ -605,6 +610,7 @@ export const store = {
     create: (data: Omit<Promotion, 'id' | 'createdAt' | 'usedCount'>): Promotion => {
       const newPromotion: Promotion = {
         ...data,
+        type: data.type || 'other',
         usedCount: 0,
         id: generateId(),
         createdAt: new Date().toISOString(),
@@ -643,6 +649,19 @@ export const store = {
         return promotions[index];
       }
       return undefined;
+    },
+    hasUserUsedTypeThisMonth: (customerPhone: string, promotionType: string, referenceDate: Date = new Date()): boolean => {
+      const year = referenceDate.getFullYear();
+      const month = referenceDate.getMonth();
+      return demands.some(demand => {
+        if (demand.customerPhone !== customerPhone) return false;
+        if (!demand.promotionId) return false;
+        const demandDate = new Date(demand.createdAt);
+        if (demandDate.getFullYear() !== year || demandDate.getMonth() !== month) return false;
+        const promotion = promotions.find(p => p.id === demand.promotionId);
+        if (!promotion) return false;
+        return promotion.type === promotionType;
+      });
     },
   },
 

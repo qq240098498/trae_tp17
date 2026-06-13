@@ -11,6 +11,8 @@ import {
   demandStatusTransitions,
   demandStatusTransitionLabels,
   getApplicablePromotions,
+  hasUserUsedPromotionTypeThisMonth,
+  promotionTypeLabels,
 } from '../../shared/types.js';
 
 const formatDate = (dateStr: string) => {
@@ -59,8 +61,36 @@ export default function Demands() {
     fetchPromotions({ active: true });
   }, [fetchDemands, fetchPromotions]);
 
+  useEffect(() => {
+    if (selectedPromotionId) {
+      const promotion = promotions.find(p => p.id === selectedPromotionId);
+      if (promotion && isPromotionDisabled(promotion)) {
+        handlePromotionSelect(null);
+      }
+    }
+  }, [formData.customerPhone, formData.budget, promotions, selectedPromotionId]);
+
   const applicablePromotions = getApplicablePromotions(promotions, formData.budget);
   const selectedPromotion = promotions.find(p => p.id === selectedPromotionId) || null;
+
+  const getUsedTypesThisMonth = (phone: string): Set<string> => {
+    if (!phone) return new Set();
+    const usedTypes = new Set<string>();
+    applicablePromotions.forEach(p => {
+      if (hasUserUsedPromotionTypeThisMonth(demands, promotions, phone, p.type)) {
+        usedTypes.add(p.type);
+      }
+    });
+    return usedTypes;
+  };
+
+  const usedTypesThisMonth = getUsedTypesThisMonth(formData.customerPhone);
+
+  const isPromotionDisabled = (promotion: Promotion): boolean => {
+    if (!formData.customerPhone) return false;
+    if (editingDemand && editingDemand.promotionId === promotion.id) return false;
+    return usedTypesThisMonth.has(promotion.type);
+  };
 
   const filteredDemands = demands.filter((demand) => {
     const matchesSearch =
@@ -567,46 +597,65 @@ export default function Demands() {
                   </div>
                 </label>
 
-                {applicablePromotions.map((promotion) => (
-                  <label
-                    key={promotion.id}
-                    className={`flex items-center justify-between p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                      selectedPromotionId === promotion.id
-                        ? 'border-indigo-500 bg-indigo-50'
-                        : 'border-gray-200 hover:border-indigo-200'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="radio"
-                        name="promotion"
-                        value={promotion.id}
-                        checked={selectedPromotionId === promotion.id}
-                        onChange={() => handlePromotionSelect(promotion.id)}
-                        className="w-4 h-4 text-indigo-600"
-                      />
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-gray-900">{promotion.name}</span>
-                          {selectedPromotionId === promotion.id && (
-                            <CheckCircle2 className="w-4 h-4 text-indigo-600" />
+                {applicablePromotions.map((promotion) => {
+                  const disabled = isPromotionDisabled(promotion);
+                  return (
+                    <label
+                      key={promotion.id}
+                      className={`flex items-center justify-between p-4 border-2 rounded-lg transition-all ${
+                        selectedPromotionId === promotion.id
+                          ? 'border-indigo-500 bg-indigo-50'
+                          : disabled
+                          ? 'border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed'
+                          : 'border-gray-200 hover:border-indigo-200 cursor-pointer'
+                      }`}
+                      onClick={(e) => {
+                        if (disabled) {
+                          e.preventDefault();
+                        }
+                      }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="radio"
+                          name="promotion"
+                          value={promotion.id}
+                          checked={selectedPromotionId === promotion.id}
+                          onChange={() => handlePromotionSelect(promotion.id)}
+                          disabled={disabled}
+                          className="w-4 h-4 text-indigo-600 disabled:cursor-not-allowed"
+                        />
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className={`font-medium ${disabled ? 'text-gray-500' : 'text-gray-900'}`}>
+                              {promotion.name}
+                            </span>
+                            {selectedPromotionId === promotion.id && (
+                              <CheckCircle2 className="w-4 h-4 text-indigo-600" />
+                            )}
+                          </div>
+                          <div className="text-sm text-gray-500 mt-0.5">
+                            {promotion.description}
+                          </div>
+                          {disabled && (
+                            <div className="text-xs text-orange-600 mt-1 flex items-center gap-1">
+                              <Ban className="w-3 h-3" />
+                              本月已使用「{promotionTypeLabels[promotion.type]}」类型优惠
+                            </div>
                           )}
                         </div>
-                        <div className="text-sm text-gray-500 mt-0.5">
-                          {promotion.description}
+                      </div>
+                      <div className="text-right">
+                        <div className={`text-lg font-bold ${disabled ? 'text-gray-400' : 'text-red-500'}`}>
+                          减 ¥{promotion.discountAmount.toLocaleString()}
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          满 ¥{promotion.minAmount.toLocaleString()} 可用
                         </div>
                       </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-lg font-bold text-red-500">
-                        减 ¥{promotion.discountAmount.toLocaleString()}
-                      </div>
-                      <div className="text-xs text-gray-400">
-                        满 ¥{promotion.minAmount.toLocaleString()} 可用
-                      </div>
-                    </div>
-                  </label>
-                ))}
+                    </label>
+                  );
+                })}
               </div>
             )}
 

@@ -1,6 +1,6 @@
 import express, { type Request, type Response } from 'express';
 import { store } from '../data/store.js';
-import { canTransitionDemandStatus, calculatePromotionDiscount } from '../../shared/types.js';
+import { canTransitionDemandStatus, calculatePromotionDiscount, promotionTypeLabels } from '../../shared/types.js';
 import type { Demand, DemandStatus } from '../../shared/types.js';
 
 const router = express.Router();
@@ -55,6 +55,19 @@ router.post('/', (req: Request, res: Response) => {
       res.status(400).json({
         success: false,
         error: '优惠活动不存在',
+      });
+      return;
+    }
+
+    const hasUsedThisMonth = store.promotions.hasUserUsedTypeThisMonth(
+      customerPhone,
+      promotion.type
+    );
+    if (hasUsedThisMonth) {
+      const typeLabel = promotionTypeLabels[promotion.type] || promotion.type;
+      res.status(400).json({
+        success: false,
+        error: `该手机号本月已使用过「${typeLabel}」类型的优惠，同类型优惠每人每月限用一张`,
       });
       return;
     }
@@ -134,6 +147,19 @@ router.put('/:id', (req: Request, res: Response) => {
         res.status(400).json({
           success: false,
           error: '优惠活动不存在',
+        });
+        return;
+      }
+
+      const hasUsedThisMonth = store.promotions.hasUserUsedTypeThisMonth(
+        demand.customerPhone,
+        promotion.type
+      );
+      if (hasUsedThisMonth) {
+        const typeLabel = promotionTypeLabels[promotion.type] || promotion.type;
+        res.status(400).json({
+          success: false,
+          error: `该手机号本月已使用过「${typeLabel}」类型的优惠，同类型优惠每人每月限用一张`,
         });
         return;
       }

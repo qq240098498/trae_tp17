@@ -6,10 +6,13 @@ export type ExpenseType = 'purchase' | 'shipping' | 'service' | 'tax' | 'other';
 
 export type PromotionStatus = 'active' | 'inactive' | 'expired';
 
+export type PromotionType = 'new_user' | 'full_reduction' | 'festival' | 'vip' | 'other';
+
 export interface Promotion {
   id: string;
   name: string;
   description: string;
+  type: PromotionType;
   minAmount: number;
   discountAmount: number;
   startDate: string;
@@ -158,6 +161,38 @@ export const promotionStatusLabels: Record<PromotionStatus, string> = {
   inactive: '未启用',
   expired: '已过期',
 };
+
+export const promotionTypeLabels: Record<PromotionType, string> = {
+  new_user: '新人专享',
+  full_reduction: '满减优惠',
+  festival: '节日特惠',
+  vip: '会员专属',
+  other: '其他',
+};
+
+export function hasUserUsedPromotionTypeThisMonth(
+  demands: Demand[],
+  promotions: Promotion[],
+  customerPhone: string,
+  promotionType: PromotionType,
+  currentMonth: Date = new Date()
+): boolean {
+  const year = currentMonth.getFullYear();
+  const month = currentMonth.getMonth();
+
+  return demands.some(demand => {
+    if (demand.customerPhone !== customerPhone) return false;
+    if (!demand.promotionId) return false;
+
+    const demandDate = new Date(demand.createdAt);
+    if (demandDate.getFullYear() !== year || demandDate.getMonth() !== month) return false;
+
+    const promotion = promotions.find(p => p.id === demand.promotionId);
+    if (!promotion) return false;
+
+    return promotion.type === promotionType;
+  });
+}
 
 export function calculatePromotionDiscount(promotion: Promotion, totalAmount: number): number {
   if (promotion.status !== 'active') return 0;
