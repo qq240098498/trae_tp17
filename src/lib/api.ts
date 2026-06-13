@@ -1,4 +1,4 @@
-import type { Demand, Product, Expense, Statistics, SalesTrendItem, ProductRankItem } from '../../shared/types.js';
+import type { Demand, Product, Expense, Statistics, SalesTrendItem, ProductRankItem, Promotion } from '../../shared/types.js';
 
 const API_BASE = '/api';
 
@@ -104,5 +104,31 @@ export const api = {
     getProductRanking: (limit?: number) =>
       request<ProductRankItem[]>(`/statistics/product-ranking${limit ? `?limit=${limit}` : ''}`),
     getExpenseByType: () => request<Record<string, number>>('/statistics/expense-by-type'),
+  },
+
+  promotions: {
+    getAll: (params?: { status?: string; active?: boolean }) => {
+      const query = new URLSearchParams();
+      if (params?.status) query.append('status', params.status);
+      if (params?.active) query.append('active', 'true');
+      return request<Promotion[]>(`/promotions${query.toString() ? `?${query.toString()}` : ''}`);
+    },
+    getApplicable: (amount: number) =>
+      request<Promotion[]>(`/promotions/applicable?amount=${amount}`),
+    getById: (id: string) => request<Promotion>(`/promotions/${id}`),
+    create: (data: Omit<Promotion, 'id' | 'createdAt' | 'usedCount'>) =>
+      request<Promotion>('/promotions', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: Partial<Promotion>) =>
+      request<Promotion>(`/promotions/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      request<void>(`/promotions/${id}`, {
+        method: 'DELETE',
+      }),
   },
 };

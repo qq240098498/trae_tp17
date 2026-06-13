@@ -1,4 +1,4 @@
-import type { Demand, Product, Expense, DemandStatus, ProductStatus, ExpenseType, Statistics, SalesTrendItem, ProductRankItem } from '../../shared/types.js';
+import type { Demand, Product, Expense, DemandStatus, ProductStatus, ExpenseType, Statistics, SalesTrendItem, ProductRankItem, Promotion, PromotionStatus } from '../../shared/types.js';
 
 const generateId = (): string => Math.random().toString(36).substring(2, 15);
 
@@ -421,9 +421,78 @@ export const mockExpenses: Expense[] = [
   },
 ];
 
+export const mockPromotions: Promotion[] = [
+  {
+    id: generateId(),
+    name: '新人专享满减',
+    description: '新用户首单满500减50',
+    minAmount: 500,
+    discountAmount: 50,
+    startDate: formatDate(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)),
+    endDate: formatDate(new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000)),
+    status: 'active',
+    usageLimit: 100,
+    usedCount: 12,
+    createdAt: daysAgo(30),
+  },
+  {
+    id: generateId(),
+    name: '满1000减100',
+    description: '订单满1000元立减100元',
+    minAmount: 1000,
+    discountAmount: 100,
+    startDate: formatDate(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)),
+    endDate: formatDate(new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000)),
+    status: 'active',
+    usageLimit: 500,
+    usedCount: 45,
+    createdAt: daysAgo(7),
+  },
+  {
+    id: generateId(),
+    name: '满2000减250',
+    description: '大额订单优惠，满2000减250',
+    minAmount: 2000,
+    discountAmount: 250,
+    startDate: formatDate(new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)),
+    endDate: formatDate(new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)),
+    status: 'active',
+    usageLimit: 200,
+    usedCount: 8,
+    createdAt: daysAgo(3),
+  },
+  {
+    id: generateId(),
+    name: '满5000减800',
+    description: '超值大优惠，满5000减800',
+    minAmount: 5000,
+    discountAmount: 800,
+    startDate: formatDate(new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000)),
+    endDate: formatDate(new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000)),
+    status: 'active',
+    usageLimit: 50,
+    usedCount: 2,
+    createdAt: daysAgo(1),
+  },
+  {
+    id: generateId(),
+    name: '双十一特惠',
+    description: '双十一专属满3000减500',
+    minAmount: 3000,
+    discountAmount: 500,
+    startDate: formatDate(new Date(now.getTime() - 200 * 24 * 60 * 60 * 1000)),
+    endDate: formatDate(new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000)),
+    status: 'expired',
+    usageLimit: 1000,
+    usedCount: 658,
+    createdAt: daysAgo(210),
+  },
+];
+
 let demands: Demand[] = [...mockDemands];
 let products: Product[] = [...mockProducts];
 let expenses: Expense[] = [...mockExpenses];
+let promotions: Promotion[] = [...mockPromotions];
 
 export const store = {
   demands: {
@@ -517,6 +586,63 @@ export const store = {
         return true;
       }
       return false;
+    },
+  },
+
+  promotions: {
+    findAll: (): Promotion[] => promotions,
+    findById: (id: string): Promotion | undefined => promotions.find(p => p.id === id),
+    findActive: (): Promotion[] => {
+      const now = new Date();
+      return promotions.filter(p => {
+        if (p.status !== 'active') return false;
+        const start = new Date(p.startDate);
+        const end = new Date(p.endDate);
+        end.setHours(23, 59, 59, 999);
+        return now >= start && now <= end;
+      });
+    },
+    create: (data: Omit<Promotion, 'id' | 'createdAt' | 'usedCount'>): Promotion => {
+      const newPromotion: Promotion = {
+        ...data,
+        usedCount: 0,
+        id: generateId(),
+        createdAt: new Date().toISOString(),
+      };
+      promotions.unshift(newPromotion);
+      return newPromotion;
+    },
+    update: (id: string, data: Partial<Promotion>): Promotion | undefined => {
+      const index = promotions.findIndex(p => p.id === id);
+      if (index !== -1) {
+        promotions[index] = { ...promotions[index], ...data };
+        return promotions[index];
+      }
+      return undefined;
+    },
+    delete: (id: string): boolean => {
+      const index = promotions.findIndex(p => p.id === id);
+      if (index !== -1) {
+        promotions.splice(index, 1);
+        return true;
+      }
+      return false;
+    },
+    incrementUsedCount: (id: string): Promotion | undefined => {
+      const index = promotions.findIndex(p => p.id === id);
+      if (index !== -1) {
+        promotions[index] = { ...promotions[index], usedCount: promotions[index].usedCount + 1 };
+        return promotions[index];
+      }
+      return undefined;
+    },
+    decrementUsedCount: (id: string): Promotion | undefined => {
+      const index = promotions.findIndex(p => p.id === id);
+      if (index !== -1 && promotions[index].usedCount > 0) {
+        promotions[index] = { ...promotions[index], usedCount: promotions[index].usedCount - 1 };
+        return promotions[index];
+      }
+      return undefined;
     },
   },
 

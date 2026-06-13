@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { Package, ShoppingCart, DollarSign, BarChart3, Menu, X, ShoppingBag } from 'lucide-react';
+import { Package, ShoppingCart, DollarSign, BarChart3, Menu, X, ShoppingBag, Tag } from 'lucide-react';
 
 const navItems = [
   { path: '/', icon: BarChart3, label: '数据统计' },
   { path: '/demands', icon: ShoppingCart, label: '代购需求' },
   { path: '/products', icon: Package, label: '商品列表' },
   { path: '/expenses', icon: DollarSign, label: '费用管理' },
+  { path: '/promotions', icon: Tag, label: '优惠活动' },
 ];
 
 export default function Layout() {

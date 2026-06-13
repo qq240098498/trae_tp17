@@ -4,6 +4,22 @@ export type ProductStatus = 'pending' | 'purchased' | 'shipped' | 'delivered';
 
 export type ExpenseType = 'purchase' | 'shipping' | 'service' | 'tax' | 'other';
 
+export type PromotionStatus = 'active' | 'inactive' | 'expired';
+
+export interface Promotion {
+  id: string;
+  name: string;
+  description: string;
+  minAmount: number;
+  discountAmount: number;
+  startDate: string;
+  endDate: string;
+  status: PromotionStatus;
+  usageLimit: number;
+  usedCount: number;
+  createdAt: string;
+}
+
 export interface Demand {
   id: string;
   customerName: string;
@@ -14,6 +30,8 @@ export interface Demand {
   description: string;
   deadline: string;
   status: DemandStatus;
+  promotionId?: string;
+  discountAmount?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -134,3 +152,33 @@ export function getNextProductStatuses(current: ProductStatus): ProductStatus[] 
 }
 
 export const categories = ['电子产品', '美妆护肤', '服装鞋包', '母婴用品', '食品保健品', '家居用品', '其他'];
+
+export const promotionStatusLabels: Record<PromotionStatus, string> = {
+  active: '进行中',
+  inactive: '未启用',
+  expired: '已过期',
+};
+
+export function calculatePromotionDiscount(promotion: Promotion, totalAmount: number): number {
+  if (promotion.status !== 'active') return 0;
+  if (totalAmount < promotion.minAmount) return 0;
+  if (promotion.usageLimit > 0 && promotion.usedCount >= promotion.usageLimit) return 0;
+  const now = new Date();
+  const start = new Date(promotion.startDate);
+  const end = new Date(promotion.endDate);
+  end.setHours(23, 59, 59, 999);
+  if (now < start || now > end) return 0;
+  return promotion.discountAmount;
+}
+
+export function getApplicablePromotions(promotions: Promotion[], totalAmount: number): Promotion[] {
+  return promotions.filter((p) => calculatePromotionDiscount(p, totalAmount) > 0);
+}
+
+export function getBestPromotion(promotions: Promotion[], totalAmount: number): Promotion | null {
+  const applicable = getApplicablePromotions(promotions, totalAmount);
+  if (applicable.length === 0) return null;
+  return applicable.reduce((best, current) =>
+    current.discountAmount > best.discountAmount ? current : best
+  );
+}

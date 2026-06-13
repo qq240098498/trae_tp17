@@ -1,11 +1,12 @@
 import { create } from 'zustand';
-import type { Demand, Product, Expense, Statistics, SalesTrendItem, ProductRankItem, ExpenseType } from '../../shared/types.js';
+import type { Demand, Product, Expense, Statistics, SalesTrendItem, ProductRankItem, ExpenseType, Promotion, PromotionStatus } from '../../shared/types.js';
 import { api } from '../lib/api.js';
 
 interface StoreState {
   demands: Demand[];
   products: Product[];
   expenses: Expense[];
+  promotions: Promotion[];
   statistics: Statistics | null;
   salesTrend: SalesTrendItem[];
   productRanking: ProductRankItem[];
@@ -16,6 +17,8 @@ interface StoreState {
   fetchDemands: (status?: string) => Promise<void>;
   fetchProducts: (params?: { status?: string; category?: string; demandId?: string }) => Promise<void>;
   fetchExpenses: (params?: { type?: string; demandId?: string; productId?: string }) => Promise<void>;
+  fetchPromotions: (params?: { status?: string; active?: boolean }) => Promise<void>;
+  fetchApplicablePromotions: (amount: number) => Promise<Promotion[]>;
   fetchStatistics: () => Promise<void>;
   fetchSalesTrend: (days?: number) => Promise<void>;
   fetchProductRanking: (limit?: number) => Promise<void>;
@@ -34,6 +37,10 @@ interface StoreState {
   updateExpense: (id: string, data: Partial<Expense>) => Promise<boolean>;
   deleteExpense: (id: string) => Promise<boolean>;
 
+  createPromotion: (data: Omit<Promotion, 'id' | 'createdAt' | 'usedCount'>) => Promise<boolean>;
+  updatePromotion: (id: string, data: Partial<Promotion>) => Promise<boolean>;
+  deletePromotion: (id: string) => Promise<boolean>;
+
   setError: (error: string | null) => void;
 }
 
@@ -41,6 +48,7 @@ export const useStore = create<StoreState>((set, get) => ({
   demands: [],
   products: [],
   expenses: [],
+  promotions: [],
   statistics: null,
   salesTrend: [],
   productRanking: [],
@@ -118,11 +126,34 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
+  fetchPromotions: async (params?: { status?: string; active?: boolean }) => {
+    set({ loading: true, error: null });
+    const response = await api.promotions.getAll(params);
+    if (response.success && response.data) {
+      set({ promotions: response.data, loading: false });
+    } else {
+      set({ error: response.error || '获取优惠活动列表失败', loading: false });
+    }
+  },
+
+  fetchApplicablePromotions: async (amount: number): Promise<Promotion[]> => {
+    set({ loading: true, error: null });
+    const response = await api.promotions.getApplicable(amount);
+    if (response.success && response.data) {
+      set({ loading: false });
+      return response.data;
+    } else {
+      set({ error: response.error || '获取可用优惠失败', loading: false });
+      return [];
+    }
+  },
+
   fetchAll: async () => {
     await Promise.all([
       get().fetchDemands(),
       get().fetchProducts(),
       get().fetchExpenses(),
+      get().fetchPromotions(),
       get().fetchStatistics(),
       get().fetchSalesTrend(7),
       get().fetchProductRanking(5),
@@ -261,6 +292,51 @@ export const useStore = create<StoreState>((set, get) => ({
       return true;
     } else {
       set({ error: response.error || '删除费用失败', loading: false });
+      return false;
+    }
+  },
+
+  createPromotion: async (data) => {
+    set({ loading: true, error: null });
+    const response = await api.promotions.create(data);
+    if (response.success && response.data) {
+      set((state) => ({
+        promotions: [response.data!, ...state.promotions],
+        loading: false,
+      }));
+      return true;
+    } else {
+      set({ error: response.error || '创建优惠活动失败', loading: false });
+      return false;
+    }
+  },
+
+  updatePromotion: async (id, data) => {
+    set({ loading: true, error: null });
+    const response = await api.promotions.update(id, data);
+    if (response.success && response.data) {
+      set((state) => ({
+        promotions: state.promotions.map((p) => (p.id === id ? response.data! : p)),
+        loading: false,
+      }));
+      return true;
+    } else {
+      set({ error: response.error || '更新优惠活动失败', loading: false });
+      return false;
+    }
+  },
+
+  deletePromotion: async (id) => {
+    set({ loading: true, error: null });
+    const response = await api.promotions.delete(id);
+    if (response.success) {
+      set((state) => ({
+        promotions: state.promotions.filter((p) => p.id !== id),
+        loading: false,
+      }));
+      return true;
+    } else {
+      set({ error: response.error || '删除优惠活动失败', loading: false });
       return false;
     }
   },

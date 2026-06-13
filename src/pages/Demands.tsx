@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, Search, Filter, ArrowRight, Ban } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Filter, ArrowRight, Ban, Tag, CheckCircle2 } from 'lucide-react';
 import { useStore } from '../store/useStore.js';
 import Modal from '../components/Modal.js';
 import StatusBadge from '../components/StatusBadge.js';
 import ConfirmDialog from '../components/ConfirmDialog.js';
-import type { Demand, DemandStatus } from '../../shared/types.js';
+import type { Demand, DemandStatus, Promotion } from '../../shared/types.js';
 import {
   statusLabels,
   getNextDemandStatuses,
   demandStatusTransitions,
   demandStatusTransitionLabels,
+  getApplicablePromotions,
 } from '../../shared/types.js';
 
 const formatDate = (dateStr: string) => {
@@ -30,7 +31,7 @@ const getDefaultDeadline = () => {
 const getTransitionKey = (from: DemandStatus, to: DemandStatus) => `${from}->${to}`;
 
 export default function Demands() {
-  const { demands, fetchDemands, createDemand, updateDemand, deleteDemand, loading } = useStore();
+  const { demands, promotions, fetchDemands, fetchPromotions, createDemand, updateDemand, deleteDemand, loading } = useStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [editingDemand, setEditingDemand] = useState<Demand | null>(null);
@@ -38,6 +39,7 @@ export default function Demands() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<DemandStatus | 'all'>('all');
   const [statusError, setStatusError] = useState<string | null>(null);
+  const [selectedPromotionId, setSelectedPromotionId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     customerName: '',
@@ -48,11 +50,17 @@ export default function Demands() {
     description: '',
     deadline: getDefaultDeadline(),
     status: 'pending' as DemandStatus,
+    promotionId: undefined as string | undefined,
+    discountAmount: 0,
   });
 
   useEffect(() => {
     fetchDemands();
-  }, [fetchDemands]);
+    fetchPromotions({ active: true });
+  }, [fetchDemands, fetchPromotions]);
+
+  const applicablePromotions = getApplicablePromotions(promotions, formData.budget);
+  const selectedPromotion = promotions.find(p => p.id === selectedPromotionId) || null;
 
   const filteredDemands = demands.filter((demand) => {
     const matchesSearch =
@@ -67,6 +75,7 @@ export default function Demands() {
     setStatusError(null);
     if (demand) {
       setEditingDemand(demand);
+      setSelectedPromotionId(demand.promotionId || null);
       setFormData({
         customerName: demand.customerName,
         customerPhone: demand.customerPhone,
@@ -76,9 +85,12 @@ export default function Demands() {
         description: demand.description,
         deadline: demand.deadline,
         status: demand.status,
+        promotionId: demand.promotionId,
+        discountAmount: demand.discountAmount || 0,
       });
     } else {
       setEditingDemand(null);
+      setSelectedPromotionId(null);
       setFormData({
         customerName: '',
         customerPhone: '',
@@ -88,6 +100,8 @@ export default function Demands() {
         description: '',
         deadline: getDefaultDeadline(),
         status: 'pending',
+        promotionId: undefined,
+        discountAmount: 0,
       });
     }
     setIsModalOpen(true);
@@ -97,6 +111,27 @@ export default function Demands() {
     setIsModalOpen(false);
     setEditingDemand(null);
     setStatusError(null);
+    setSelectedPromotionId(null);
+  };
+
+  const handlePromotionSelect = (promotionId: string | null) => {
+    setSelectedPromotionId(promotionId);
+    if (promotionId) {
+      const promotion = promotions.find(p => p.id === promotionId);
+      if (promotion) {
+        setFormData({
+          ...formData,
+          promotionId,
+          discountAmount: promotion.discountAmount,
+        });
+      }
+    } else {
+      setFormData({
+        ...formData,
+        promotionId: undefined,
+        discountAmount: 0,
+      });
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -207,6 +242,9 @@ export default function Demands() {
                   数量/预算
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  优惠信息
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   截止日期
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -245,6 +283,23 @@ export default function Demands() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-gray-900">x{demand.quantity}</div>
                       <div className="text-sm text-gray-500">¥{demand.budget.toLocaleString()}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {demand.discountAmount && demand.discountAmount > 0 ? (
+                        <div className="flex items-center gap-1.5">
+                          <Tag className="w-4 h-4 text-red-500" />
+                          <span className="text-sm font-medium text-red-600">
+                            已优惠 ¥{demand.discountAmount.toLocaleString()}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400">无优惠</span>
+                      )}
+                      {demand.discountAmount && demand.discountAmount > 0 && (
+                        <div className="text-xs text-gray-400 mt-1">
+                          实收: ¥{(demand.budget - demand.discountAmount).toLocaleString()}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-gray-600">
                       {formatDate(demand.deadline)}
@@ -306,7 +361,7 @@ export default function Demands() {
               })}
               {filteredDemands.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
                     暂无数据
                   </td>
                 </tr>
@@ -466,6 +521,112 @@ export default function Demands() {
                 placeholder="规格、颜色等备注信息"
               />
             </div>
+          </div>
+
+          <div className="border-t border-gray-200 pt-4">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <Tag className="w-4 h-4" />
+                选择优惠活动
+                <span className="text-xs font-normal text-gray-400">（仅可选择一张）</span>
+              </h4>
+              {formData.budget > 0 && (
+                <span className="text-sm text-gray-500">
+                  当前预算: <span className="font-semibold text-gray-700">¥{formData.budget.toLocaleString()}</span>
+                </span>
+              )}
+            </div>
+
+            {formData.budget <= 0 ? (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center text-sm text-gray-500">
+                请先填写预算金额以查看可用优惠
+              </div>
+            ) : applicablePromotions.length === 0 ? (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center text-sm text-gray-500">
+                暂无满足条件的优惠活动
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <label
+                  className={`flex items-center justify-between p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                    selectedPromotionId === null
+                      ? 'border-indigo-500 bg-indigo-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="radio"
+                      name="promotion"
+                      value=""
+                      checked={selectedPromotionId === null}
+                      onChange={() => handlePromotionSelect(null)}
+                      className="w-4 h-4 text-indigo-600"
+                    />
+                    <span className="text-gray-700">不使用优惠</span>
+                  </div>
+                </label>
+
+                {applicablePromotions.map((promotion) => (
+                  <label
+                    key={promotion.id}
+                    className={`flex items-center justify-between p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                      selectedPromotionId === promotion.id
+                        ? 'border-indigo-500 bg-indigo-50'
+                        : 'border-gray-200 hover:border-indigo-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="radio"
+                        name="promotion"
+                        value={promotion.id}
+                        checked={selectedPromotionId === promotion.id}
+                        onChange={() => handlePromotionSelect(promotion.id)}
+                        className="w-4 h-4 text-indigo-600"
+                      />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-gray-900">{promotion.name}</span>
+                          {selectedPromotionId === promotion.id && (
+                            <CheckCircle2 className="w-4 h-4 text-indigo-600" />
+                          )}
+                        </div>
+                        <div className="text-sm text-gray-500 mt-0.5">
+                          {promotion.description}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-bold text-red-500">
+                        减 ¥{promotion.discountAmount.toLocaleString()}
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        满 ¥{promotion.minAmount.toLocaleString()} 可用
+                      </div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            )}
+
+            {selectedPromotion && (
+              <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-green-700">
+                    <span className="font-medium">优惠已选择:</span> {selectedPromotion.name}
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm text-gray-600">
+                      原价: <span className="line-through">¥{formData.budget.toLocaleString()}</span>
+                    </div>
+                    <div className="text-lg font-bold text-green-600">
+                      优惠后: ¥{(formData.budget - selectedPromotion.discountAmount).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
