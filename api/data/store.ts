@@ -1,4 +1,4 @@
-import type { Demand, Product, Expense, DemandStatus, ProductStatus, ExpenseType, Statistics, SalesTrendItem, ProductRankItem, Promotion, PromotionStatus } from '../../shared/types.js';
+import type { Demand, Product, Expense, DemandStatus, ProductStatus, ExpenseType, Statistics, SalesTrendItem, ProductRankItem, Promotion, PromotionStatus, ProductCostStat } from '../../shared/types.js';
 
 const generateId = (): string => Math.random().toString(36).substring(2, 15);
 
@@ -753,6 +753,93 @@ export const store = {
       });
 
       return result;
+    },
+
+    getProductCostStats: (searchKeyword?: string, category?: string): ProductCostStat[] => {
+      let filteredProducts = products;
+
+      if (searchKeyword && searchKeyword.trim()) {
+        const keyword = searchKeyword.trim().toLowerCase();
+        filteredProducts = filteredProducts.filter(p =>
+          p.name.toLowerCase().includes(keyword) ||
+          p.brand.toLowerCase().includes(keyword) ||
+          p.category.toLowerCase().includes(keyword)
+        );
+      }
+
+      if (category && category !== 'all') {
+        filteredProducts = filteredProducts.filter(p => p.category === category);
+      }
+
+      return filteredProducts.map(product => {
+        const demand = product.demandId ? demands.find(d => d.id === product.demandId) : undefined;
+        const productRelatedExpenses = expenses.filter(e =>
+          e.productId === product.id ||
+          (product.demandId && e.demandId === product.demandId && !e.productId)
+        );
+        const relatedExpenses = productRelatedExpenses.reduce((sum, e) => sum + e.amount, 0);
+
+        const quantity = product.quantity;
+        const purchaseCost = product.purchasePrice * quantity;
+        const sellingRevenue = product.sellingPrice * quantity;
+        const discountAmount = demand?.discountAmount || 0;
+        const grossProfit = sellingRevenue - purchaseCost;
+        const profitRate = purchaseCost > 0 ? (grossProfit / purchaseCost) * 100 : 0;
+        const netRevenue = sellingRevenue - discountAmount;
+        const netProfit = netRevenue - purchaseCost - relatedExpenses + discountAmount;
+
+        return {
+          product,
+          demand,
+          quantity,
+          purchaseCost,
+          sellingRevenue,
+          relatedExpenses,
+          grossProfit,
+          profitRate,
+          discountAmount,
+          netRevenue,
+          netProfit,
+        };
+      }).sort((a, b) => b.netProfit - a.netProfit);
+    },
+
+    getCostStatsSummary: () => {
+      const stats = store.statistics.getProductCostStats();
+
+      const totalPurchaseCost = stats.reduce((sum, s) => sum + s.purchaseCost, 0);
+      const totalSellingRevenue = stats.reduce((sum, s) => sum + s.sellingRevenue, 0);
+      const totalRelatedExpenses = stats.reduce((sum, s) => sum + s.relatedExpenses, 0);
+      const totalGrossProfit = stats.reduce((sum, s) => sum + s.grossProfit, 0);
+      const totalDiscountAmount = stats.reduce((sum, s) => sum + s.discountAmount, 0);
+      const totalNetProfit = stats.reduce((sum, s) => sum + s.netProfit, 0);
+      const totalQuantity = stats.reduce((sum, s) => sum + s.quantity, 0);
+
+      const deliveredStats = stats.filter(s =>
+        s.product.status === 'delivered' || s.product.status === 'shipped'
+      );
+      const deliveredPurchaseCost = deliveredStats.reduce((sum, s) => sum + s.purchaseCost, 0);
+      const deliveredSellingRevenue = deliveredStats.reduce((sum, s) => sum + s.sellingRevenue, 0);
+      const deliveredNetProfit = deliveredStats.reduce((sum, s) => sum + s.netProfit, 0);
+
+      return {
+        totalProducts: stats.length,
+        totalQuantity,
+        totalPurchaseCost,
+        totalSellingRevenue,
+        totalRelatedExpenses,
+        totalGrossProfit,
+        totalDiscountAmount,
+        totalNetProfit,
+        totalProfitRate: totalPurchaseCost > 0 ? (totalGrossProfit / totalPurchaseCost) * 100 : 0,
+        delivered: {
+          count: deliveredStats.length,
+          purchaseCost: deliveredPurchaseCost,
+          sellingRevenue: deliveredSellingRevenue,
+          netProfit: deliveredNetProfit,
+          profitRate: deliveredPurchaseCost > 0 ? (deliveredNetProfit / deliveredPurchaseCost) * 100 : 0,
+        },
+      };
     },
   },
 };

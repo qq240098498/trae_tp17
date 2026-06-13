@@ -82,6 +82,7 @@ export default function Promotions() {
       setFormData({
         name: promotion.name,
         description: promotion.description,
+        type: promotion.type,
         minAmount: promotion.minAmount,
         discountAmount: promotion.discountAmount,
         startDate: promotion.startDate,
@@ -94,6 +95,7 @@ export default function Promotions() {
       setFormData({
         name: '',
         description: '',
+        type: 'full_reduction' as PromotionType,
         minAmount: 0,
         discountAmount: 0,
         startDate: getTodayDate(),

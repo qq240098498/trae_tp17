@@ -76,7 +76,7 @@ router.get('/:id', (req: Request, res: Response) => {
 });
 
 router.post('/', (req: Request, res: Response) => {
-  const { name, description, minAmount, discountAmount, startDate, endDate, status, usageLimit } = req.body;
+  const { name, description, type, minAmount, discountAmount, startDate, endDate, status, usageLimit } = req.body;
 
   if (!name || minAmount === undefined || discountAmount === undefined || !startDate || !endDate) {
     res.status(400).json({
@@ -105,6 +105,7 @@ router.post('/', (req: Request, res: Response) => {
   const newPromotion = store.promotions.create({
     name,
     description: description || '',
+    type: (type as any) || 'other',
     minAmount: Number(minAmount),
     discountAmount: Number(discountAmount),
     startDate,

@@ -43,4 +43,26 @@ router.get('/expense-by-type', (req: Request, res: Response) => {
   });
 });
 
+router.get('/product-cost-stats', (req: Request, res: Response) => {
+  const { keyword, category } = req.query;
+  const stats = store.statistics.getProductCostStats(
+    keyword as string | undefined,
+    category as string | undefined
+  );
+  
+  res.json({
+    success: true,
+    data: stats,
+  });
+});
+
+router.get('/cost-stats-summary', (req: Request, res: Response) => {
+  const summary = store.statistics.getCostStatsSummary();
+  
+  res.json({
+    success: true,
+    data: summary,
+  });
+});
+
 export default router;

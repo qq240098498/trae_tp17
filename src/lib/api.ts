@@ -1,4 +1,4 @@
-import type { Demand, Product, Expense, Statistics, SalesTrendItem, ProductRankItem, Promotion } from '../../shared/types.js';
+import type { Demand, Product, Expense, Statistics, SalesTrendItem, ProductRankItem, Promotion, ProductCostStat } from '../../shared/types.js';
 
 const API_BASE = '/api';
 
@@ -31,6 +31,17 @@ export const api = {
     getAll: (status?: string) =>
       request<Demand[]>(`/demands${status ? `?status=${status}` : ''}`),
     getById: (id: string) => request<Demand>(`/demands/${id}`),
+    getProducts: (id: string) => request<Product[]>(`/demands/${id}/products`),
+    bindProducts: (id: string, productIds: string[]) =>
+      request<{ bound: Product[]; errors: string[] }>(`/demands/${id}/bind-products`, {
+        method: 'POST',
+        body: JSON.stringify({ productIds }),
+      }),
+    unbindProducts: (id: string, productIds?: string[]) =>
+      request<void>(`/demands/${id}/unbind-products`, {
+        method: 'POST',
+        body: JSON.stringify({ productIds }),
+      }),
     create: (data: Omit<Demand, 'id' | 'createdAt' | 'updatedAt'>) =>
       request<Demand>('/demands', {
         method: 'POST',
@@ -104,6 +115,13 @@ export const api = {
     getProductRanking: (limit?: number) =>
       request<ProductRankItem[]>(`/statistics/product-ranking${limit ? `?limit=${limit}` : ''}`),
     getExpenseByType: () => request<Record<string, number>>('/statistics/expense-by-type'),
+    getProductCostStats: (params?: { keyword?: string; category?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.keyword) query.append('keyword', params.keyword);
+      if (params?.category) query.append('category', params.category);
+      return request<ProductCostStat[]>(`/statistics/product-cost-stats${query.toString() ? `?${query.toString()}` : ''}`);
+    },
+    getCostStatsSummary: () => request<any>('/statistics/cost-stats-summary'),
   },
 
   promotions: {

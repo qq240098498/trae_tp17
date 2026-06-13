@@ -85,6 +85,20 @@ export interface ProductRankItem {
   revenue: number;
 }
 
+export interface ProductCostStat {
+  product: Product;
+  demand?: Demand;
+  quantity: number;
+  purchaseCost: number;
+  sellingRevenue: number;
+  relatedExpenses: number;
+  grossProfit: number;
+  profitRate: number;
+  discountAmount: number;
+  netRevenue: number;
+  netProfit: number;
+}
+
 export const statusLabels: Record<DemandStatus, string> = {
   pending: '待处理',
   purchasing: '采购中',

@@ -214,4 +214,106 @@ router.delete('/:id', (req: Request, res: Response) => {
   });
 });
 
+router.get('/:id/products', (req: Request, res: Response) => {
+  const demand = store.demands.findById(req.params.id);
+  if (!demand) {
+    res.status(404).json({
+      success: false,
+      error: '需求不存在',
+    });
+    return;
+  }
+
+  const products = store.products.findByDemandId(req.params.id);
+  
+  res.json({
+    success: true,
+    data: products,
+  });
+});
+
+router.post('/:id/bind-products', (req: Request, res: Response) => {
+  const demand = store.demands.findById(req.params.id);
+  if (!demand) {
+    res.status(404).json({
+      success: false,
+      error: '需求不存在',
+    });
+    return;
+  }
+
+  const { productIds } = req.body as { productIds?: string[] };
+  if (!productIds || !Array.isArray(productIds)) {
+    res.status(400).json({
+      success: false,
+      error: '缺少 productIds 数组参数',
+    });
+    return;
+  }
+
+  const boundProducts = [];
+  const errors: string[] = [];
+
+  for (const productId of productIds) {
+    const product = store.products.findById(productId);
+    if (!product) {
+      errors.push(`商品 ${productId} 不存在`);
+      continue;
+    }
+    if (product.demandId && product.demandId !== req.params.id) {
+      errors.push(`商品 ${product.name} 已绑定到其他需求`);
+      continue;
+    }
+    const updated = store.products.update(productId, { demandId: req.params.id });
+    if (updated) boundProducts.push(updated);
+  }
+
+  res.json({
+    success: true,
+    data: {
+      bound: boundProducts,
+      errors,
+    },
+    message: `成功绑定 ${boundProducts.length} 个商品${errors.length > 0 ? `，${errors.length} 个失败` : ''}`,
+  });
+});
+
+router.post('/:id/unbind-products', (req: Request, res: Response) => {
+  const demand = store.demands.findById(req.params.id);
+  if (!demand) {
+    res.status(404).json({
+      success: false,
+      error: '需求不存在',
+    });
+    return;
+  }
+
+  const { productIds } = req.body as { productIds?: string[] };
+  if (!productIds || !Array.isArray(productIds)) {
+    const allProducts = store.products.findByDemandId(req.params.id);
+    for (const product of allProducts) {
+      store.products.update(product.id, { demandId: undefined });
+    }
+    res.json({
+      success: true,
+      message: `已解绑 ${allProducts.length} 个商品`,
+    });
+    return;
+  }
+
+  let unboundCount = 0;
+  for (const productId of productIds) {
+    const product = store.products.findById(productId);
+    if (product && product.demandId === req.params.id) {
+      store.products.update(productId, { demandId: undefined });
+      unboundCount++;
+    }
+  }
+
+  res.json({
+    success: true,
+    message: `已解绑 ${unboundCount} 个商品`,
+  });
+});
+
 export default router;

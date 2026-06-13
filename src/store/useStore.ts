@@ -1,6 +1,25 @@
 import { create } from 'zustand';
-import type { Demand, Product, Expense, Statistics, SalesTrendItem, ProductRankItem, ExpenseType, Promotion, PromotionStatus } from '../../shared/types.js';
+import type { Demand, Product, Expense, Statistics, SalesTrendItem, ProductRankItem, ExpenseType, Promotion, PromotionStatus, ProductCostStat } from '../../shared/types.js';
 import { api } from '../lib/api.js';
+
+interface CostStatsSummary {
+  totalProducts: number;
+  totalQuantity: number;
+  totalPurchaseCost: number;
+  totalSellingRevenue: number;
+  totalRelatedExpenses: number;
+  totalGrossProfit: number;
+  totalDiscountAmount: number;
+  totalNetProfit: number;
+  totalProfitRate: number;
+  delivered: {
+    count: number;
+    purchaseCost: number;
+    sellingRevenue: number;
+    netProfit: number;
+    profitRate: number;
+  };
+}
 
 interface StoreState {
   demands: Demand[];
@@ -11,6 +30,8 @@ interface StoreState {
   salesTrend: SalesTrendItem[];
   productRanking: ProductRankItem[];
   expenseByType: Record<ExpenseType, number> | null;
+  productCostStats: ProductCostStat[];
+  costStatsSummary: CostStatsSummary | null;
   loading: boolean;
   error: string | null;
 
@@ -23,11 +44,15 @@ interface StoreState {
   fetchSalesTrend: (days?: number) => Promise<void>;
   fetchProductRanking: (limit?: number) => Promise<void>;
   fetchExpenseByType: () => Promise<void>;
+  fetchProductCostStats: (params?: { keyword?: string; category?: string }) => Promise<void>;
+  fetchCostStatsSummary: () => Promise<void>;
   fetchAll: () => Promise<void>;
 
   createDemand: (data: Omit<Demand, 'id' | 'createdAt' | 'updatedAt'>) => Promise<boolean>;
   updateDemand: (id: string, data: Partial<Demand>) => Promise<boolean>;
   deleteDemand: (id: string) => Promise<boolean>;
+  bindProductsToDemand: (demandId: string, productIds: string[]) => Promise<boolean>;
+  unbindProductsFromDemand: (demandId: string, productIds?: string[]) => Promise<boolean>;
 
   createProduct: (data: Omit<Product, 'id' | 'createdAt'>) => Promise<boolean>;
   updateProduct: (id: string, data: Partial<Product>) => Promise<boolean>;
@@ -53,6 +78,8 @@ export const useStore = create<StoreState>((set, get) => ({
   salesTrend: [],
   productRanking: [],
   expenseByType: null,
+  productCostStats: [],
+  costStatsSummary: null,
   loading: false,
   error: null,
 
@@ -126,6 +153,26 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
+  fetchProductCostStats: async (params?: { keyword?: string; category?: string }) => {
+    set({ loading: true, error: null });
+    const response = await api.statistics.getProductCostStats(params);
+    if (response.success && response.data) {
+      set({ productCostStats: response.data, loading: false });
+    } else {
+      set({ error: response.error || '获取商品成本统计失败', loading: false });
+    }
+  },
+
+  fetchCostStatsSummary: async () => {
+    set({ loading: true, error: null });
+    const response = await api.statistics.getCostStatsSummary();
+    if (response.success && response.data) {
+      set({ costStatsSummary: response.data as CostStatsSummary, loading: false });
+    } else {
+      set({ error: response.error || '获取成本统计摘要失败', loading: false });
+    }
+  },
+
   fetchPromotions: async (params?: { status?: string; active?: boolean }) => {
     set({ loading: true, error: null });
     const response = await api.promotions.getAll(params);
@@ -158,6 +205,8 @@ export const useStore = create<StoreState>((set, get) => ({
       get().fetchSalesTrend(7),
       get().fetchProductRanking(5),
       get().fetchExpenseByType(),
+      get().fetchProductCostStats(),
+      get().fetchCostStatsSummary(),
     ]);
   },
 
@@ -197,11 +246,58 @@ export const useStore = create<StoreState>((set, get) => ({
     if (response.success) {
       set((state) => ({
         demands: state.demands.filter((d) => d.id !== id),
+        products: state.products.map((p) =>
+          p.demandId === id ? { ...p, demandId: undefined } : p
+        ),
         loading: false,
       }));
       return true;
     } else {
       set({ error: response.error || '删除需求失败', loading: false });
+      return false;
+    }
+  },
+
+  bindProductsToDemand: async (demandId, productIds) => {
+    set({ loading: true, error: null });
+    const response = await api.demands.bindProducts(demandId, productIds);
+    if (response.success && response.data) {
+      const boundProducts = response.data.bound;
+      set((state) => ({
+        products: state.products.map((p) => {
+          const bound = boundProducts.find((bp: Product) => bp.id === p.id);
+          return bound || p;
+        }),
+        loading: false,
+      }));
+      if (response.data.errors && response.data.errors.length > 0) {
+        set({ error: response.data.errors.join('; ') });
+      }
+      return true;
+    } else {
+      set({ error: response.error || '绑定商品失败', loading: false });
+      return false;
+    }
+  },
+
+  unbindProductsFromDemand: async (demandId, productIds) => {
+    set({ loading: true, error: null });
+    const response = await api.demands.unbindProducts(demandId, productIds);
+    if (response.success) {
+      set((state) => ({
+        products: state.products.map((p) => {
+          if (p.demandId === demandId) {
+            if (!productIds || productIds.includes(p.id)) {
+              return { ...p, demandId: undefined };
+            }
+          }
+          return p;
+        }),
+        loading: false,
+      }));
+      return true;
+    } else {
+      set({ error: response.error || '解绑商品失败', loading: false });
       return false;
     }
   },
