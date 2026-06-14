@@ -1,9 +1,9 @@
-import type { DemandStatus, ProductStatus, ExpenseType } from '../../shared/types.js';
-import { statusLabels, productStatusLabels, expenseTypeLabels } from '../../shared/types.js';
+import type { DemandStatus, ProductStatus, ExpenseType, RefundStatus, RefundType } from '../../shared/types.js';
+import { statusLabels, productStatusLabels, expenseTypeLabels, refundStatusLabels, refundTypeLabels } from '../../shared/types.js';
 
 interface StatusBadgeProps {
-  status: DemandStatus | ProductStatus | ExpenseType;
-  type?: 'demand' | 'product' | 'expense';
+  status: DemandStatus | ProductStatus | ExpenseType | RefundStatus | RefundType;
+  type?: 'demand' | 'product' | 'expense' | 'refund' | 'refund_type';
 }
 
 export default function StatusBadge({ status, type = 'demand' }: StatusBadgeProps) {
@@ -11,6 +11,8 @@ export default function StatusBadge({ status, type = 'demand' }: StatusBadgeProp
     if (type === 'demand') return statusLabels[status as DemandStatus];
     if (type === 'product') return productStatusLabels[status as ProductStatus];
     if (type === 'expense') return expenseTypeLabels[status as ExpenseType];
+    if (type === 'refund') return refundStatusLabels[status as RefundStatus];
+    if (type === 'refund_type') return refundTypeLabels[status as RefundType];
     return status;
   };
 
@@ -22,6 +24,7 @@ export default function StatusBadge({ status, type = 'demand' }: StatusBadgeProp
         shipping: 'bg-purple-100 text-purple-700',
         completed: 'bg-green-100 text-green-700',
         cancelled: 'bg-gray-100 text-gray-700',
+        refunded: 'bg-teal-100 text-teal-700',
       };
       return colors[status as DemandStatus];
     }
@@ -43,6 +46,25 @@ export default function StatusBadge({ status, type = 'demand' }: StatusBadgeProp
         other: 'bg-gray-100 text-gray-700',
       };
       return colors[status as ExpenseType];
+    }
+    if (type === 'refund') {
+      const colors: Record<RefundStatus, string> = {
+        pending: 'bg-yellow-100 text-yellow-700',
+        approved: 'bg-blue-100 text-blue-700',
+        rejected: 'bg-gray-100 text-gray-700',
+        return_shipped: 'bg-purple-100 text-purple-700',
+        return_received: 'bg-indigo-100 text-indigo-700',
+        refunded: 'bg-green-100 text-green-700',
+        cancelled: 'bg-gray-100 text-gray-500',
+      };
+      return colors[status as RefundStatus];
+    }
+    if (type === 'refund_type') {
+      const colors: Record<RefundType, string> = {
+        before_delivery: 'bg-blue-50 text-blue-600 border border-blue-200',
+        after_delivery: 'bg-orange-50 text-orange-600 border border-orange-200',
+      };
+      return colors[status as RefundType];
     }
     return 'bg-gray-100 text-gray-700';
   };

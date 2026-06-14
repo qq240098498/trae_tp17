@@ -17,6 +17,7 @@ import productsRoutes from './routes/products.js'
 import expensesRoutes from './routes/expenses.js'
 import statisticsRoutes from './routes/statistics.js'
 import promotionsRoutes from './routes/promotions.js'
+import refundsRoutes from './routes/refunds.js'
 
 // for esm mode
 const __filename = fileURLToPath(import.meta.url)
@@ -40,6 +41,7 @@ app.use('/api/products', productsRoutes)
 app.use('/api/expenses', expensesRoutes)
 app.use('/api/statistics', statisticsRoutes)
 app.use('/api/promotions', promotionsRoutes)
+app.use('/api/refunds', refundsRoutes)
 
 /**
  * health

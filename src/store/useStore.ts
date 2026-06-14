@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Demand, Product, Expense, Statistics, SalesTrendItem, ProductRankItem, ExpenseType, Promotion, PromotionStatus, ProductCostStat } from '../../shared/types.js';
+import type { Demand, Product, Expense, Statistics, SalesTrendItem, ProductRankItem, ExpenseType, Promotion, PromotionStatus, ProductCostStat, Refund, RefundStatus } from '../../shared/types.js';
 import { api } from '../lib/api.js';
 
 interface CostStatsSummary {
@@ -26,6 +26,7 @@ interface StoreState {
   products: Product[];
   expenses: Expense[];
   promotions: Promotion[];
+  refunds: Refund[];
   statistics: Statistics | null;
   salesTrend: SalesTrendItem[];
   productRanking: ProductRankItem[];
@@ -39,6 +40,7 @@ interface StoreState {
   fetchProducts: (params?: { status?: string; category?: string; demandId?: string }) => Promise<void>;
   fetchExpenses: (params?: { type?: string; demandId?: string; productId?: string }) => Promise<void>;
   fetchPromotions: (params?: { status?: string; active?: boolean }) => Promise<void>;
+  fetchRefunds: (params?: { status?: string; type?: string; demandId?: string }) => Promise<void>;
   fetchApplicablePromotions: (amount: number) => Promise<Promotion[]>;
   fetchStatistics: () => Promise<void>;
   fetchSalesTrend: (days?: number) => Promise<void>;
@@ -66,6 +68,14 @@ interface StoreState {
   updatePromotion: (id: string, data: Partial<Promotion>) => Promise<boolean>;
   deletePromotion: (id: string) => Promise<boolean>;
 
+  createRefund: (data: Omit<Refund, 'id' | 'createdAt' | 'updatedAt'>) => Promise<boolean>;
+  updateRefund: (id: string, data: Partial<Refund>) => Promise<boolean>;
+  deleteRefund: (id: string) => Promise<boolean>;
+  approveRefund: (id: string) => Promise<boolean>;
+  rejectRefund: (id: string, rejectReason: string) => Promise<boolean>;
+  completeRefund: (id: string) => Promise<boolean>;
+  receiveReturn: (id: string, receivedBy?: string) => Promise<boolean>;
+
   setError: (error: string | null) => void;
 }
 
@@ -74,6 +84,7 @@ export const useStore = create<StoreState>((set, get) => ({
   products: [],
   expenses: [],
   promotions: [],
+  refunds: [],
   statistics: null,
   salesTrend: [],
   productRanking: [],
@@ -195,12 +206,23 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
+  fetchRefunds: async (params?: { status?: string; type?: string; demandId?: string }) => {
+    set({ loading: true, error: null });
+    const response = await api.refunds.getAll(params);
+    if (response.success && response.data) {
+      set({ refunds: response.data, loading: false });
+    } else {
+      set({ error: response.error || '获取退款列表失败', loading: false });
+    }
+  },
+
   fetchAll: async () => {
     await Promise.all([
       get().fetchDemands(),
       get().fetchProducts(),
       get().fetchExpenses(),
       get().fetchPromotions(),
+      get().fetchRefunds(),
       get().fetchStatistics(),
       get().fetchSalesTrend(7),
       get().fetchProductRanking(5),
@@ -433,6 +455,117 @@ export const useStore = create<StoreState>((set, get) => ({
       return true;
     } else {
       set({ error: response.error || '删除优惠活动失败', loading: false });
+      return false;
+    }
+  },
+
+  createRefund: async (data) => {
+    set({ loading: true, error: null });
+    const response = await api.refunds.create(data);
+    if (response.success && response.data) {
+      set((state) => ({
+        refunds: [response.data!, ...state.refunds],
+        loading: false,
+      }));
+      return true;
+    } else {
+      set({ error: response.error || '创建退款申请失败', loading: false });
+      return false;
+    }
+  },
+
+  updateRefund: async (id, data) => {
+    set({ loading: true, error: null });
+    const response = await api.refunds.update(id, data);
+    if (response.success && response.data) {
+      set((state) => ({
+        refunds: state.refunds.map((r) => (r.id === id ? response.data! : r)),
+        demands: response.data!.status === 'refunded'
+          ? state.demands.map((d) => d.id === response.data!.demandId ? { ...d, status: 'refunded' as const } : d)
+          : state.demands,
+        loading: false,
+      }));
+      return true;
+    } else {
+      set({ error: response.error || '更新退款申请失败', loading: false });
+      return false;
+    }
+  },
+
+  deleteRefund: async (id) => {
+    set({ loading: true, error: null });
+    const response = await api.refunds.delete(id);
+    if (response.success) {
+      set((state) => ({
+        refunds: state.refunds.filter((r) => r.id !== id),
+        loading: false,
+      }));
+      return true;
+    } else {
+      set({ error: response.error || '删除退款申请失败', loading: false });
+      return false;
+    }
+  },
+
+  approveRefund: async (id) => {
+    set({ loading: true, error: null });
+    const response = await api.refunds.approve(id);
+    if (response.success && response.data) {
+      set((state) => ({
+        refunds: state.refunds.map((r) => (r.id === id ? response.data! : r)),
+        loading: false,
+      }));
+      return true;
+    } else {
+      set({ error: response.error || '批准退款失败', loading: false });
+      return false;
+    }
+  },
+
+  rejectRefund: async (id, rejectReason) => {
+    set({ loading: true, error: null });
+    const response = await api.refunds.reject(id, rejectReason);
+    if (response.success && response.data) {
+      set((state) => ({
+        refunds: state.refunds.map((r) => (r.id === id ? response.data! : r)),
+        loading: false,
+      }));
+      return true;
+    } else {
+      set({ error: response.error || '拒绝退款失败', loading: false });
+      return false;
+    }
+  },
+
+  completeRefund: async (id) => {
+    set({ loading: true, error: null });
+    const response = await api.refunds.completeRefund(id);
+    if (response.success && response.data) {
+      set((state) => ({
+        refunds: state.refunds.map((r) => (r.id === id ? response.data! : r)),
+        demands: state.demands.map((d) =>
+          d.id === response.data!.demandId ? { ...d, status: 'refunded' as const } : d
+        ),
+        loading: false,
+      }));
+      return true;
+    } else {
+      set({ error: response.error || '完成退款失败', loading: false });
+      return false;
+    }
+  },
+
+  receiveReturn: async (id, receivedBy) => {
+    set({ loading: true, error: null });
+    const response = await api.refunds.receiveReturn(id, receivedBy);
+    if (response.success && response.data) {
+      set((state) => ({
+        refunds: state.refunds.map((r) => (r.id === id ? response.data! : r)),
+        loading: false,
+      }));
+      return true;
+    } else {
+      set({ error: response.error || '确认收货失败', loading: false });
       return false;
     }
   },

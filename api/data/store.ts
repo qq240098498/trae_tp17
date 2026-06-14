@@ -1,4 +1,4 @@
-import type { Demand, Product, Expense, DemandStatus, ProductStatus, ExpenseType, Statistics, SalesTrendItem, ProductRankItem, Promotion, PromotionStatus, ProductCostStat } from '../../shared/types.js';
+import type { Demand, Product, Expense, DemandStatus, ProductStatus, ExpenseType, Statistics, SalesTrendItem, ProductRankItem, Promotion, PromotionStatus, ProductCostStat, Refund, RefundStatus, RefundType } from '../../shared/types.js';
 
 const generateId = (): string => Math.random().toString(36).substring(2, 15);
 
@@ -494,10 +494,34 @@ export const mockPromotions: Promotion[] = [
   },
 ];
 
+export const mockRefunds: Refund[] = [
+  {
+    id: generateId(),
+    demandId: demandIds[3],
+    type: 'after_delivery',
+    status: 'pending',
+    reason: '商品与描述不符，客户要求退货退款',
+    refundAmount: 1800,
+    createdAt: daysAgo(2),
+    updatedAt: daysAgo(2),
+  },
+  {
+    id: generateId(),
+    demandId: demandIds[0],
+    type: 'before_delivery',
+    status: 'approved',
+    reason: '客户临时改变主意，不需要了',
+    refundAmount: 9999,
+    createdAt: daysAgo(1),
+    updatedAt: daysAgo(1),
+  },
+];
+
 let demands: Demand[] = [...mockDemands];
 let products: Product[] = [...mockProducts];
 let expenses: Expense[] = [...mockExpenses];
 let promotions: Promotion[] = [...mockPromotions];
+let refunds: Refund[] = [...mockRefunds];
 
 export const store = {
   demands: {
@@ -662,6 +686,46 @@ export const store = {
         if (!promotion) return false;
         return promotion.type === promotionType;
       });
+    },
+  },
+
+  refunds: {
+    findAll: (): Refund[] => refunds,
+    findById: (id: string): Refund | undefined => refunds.find(r => r.id === id),
+    findByDemandId: (demandId: string): Refund[] => refunds.filter(r => r.demandId === demandId),
+    findByStatus: (status: RefundStatus): Refund[] => refunds.filter(r => r.status === status),
+    findByType: (type: RefundType): Refund[] => refunds.filter(r => r.type === type),
+    hasActiveRefundForDemand: (demandId: string): boolean => {
+      return refunds.some(r =>
+        r.demandId === demandId &&
+        ['pending', 'approved', 'return_shipped', 'return_received'].includes(r.status)
+      );
+    },
+    create: (data: Omit<Refund, 'id' | 'createdAt' | 'updatedAt'>): Refund => {
+      const newRefund: Refund = {
+        ...data,
+        id: generateId(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      refunds.unshift(newRefund);
+      return newRefund;
+    },
+    update: (id: string, data: Partial<Refund>): Refund | undefined => {
+      const index = refunds.findIndex(r => r.id === id);
+      if (index !== -1) {
+        refunds[index] = { ...refunds[index], ...data, updatedAt: new Date().toISOString() };
+        return refunds[index];
+      }
+      return undefined;
+    },
+    delete: (id: string): boolean => {
+      const index = refunds.findIndex(r => r.id === id);
+      if (index !== -1) {
+        refunds.splice(index, 1);
+        return true;
+      }
+      return false;
     },
   },
 

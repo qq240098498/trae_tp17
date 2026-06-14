@@ -1,4 +1,4 @@
-import type { Demand, Product, Expense, Statistics, SalesTrendItem, ProductRankItem, Promotion, ProductCostStat } from '../../shared/types.js';
+import type { Demand, Product, Expense, Statistics, SalesTrendItem, ProductRankItem, Promotion, ProductCostStat, Refund } from '../../shared/types.js';
 
 const API_BASE = '/api';
 
@@ -147,6 +147,49 @@ export const api = {
     delete: (id: string) =>
       request<void>(`/promotions/${id}`, {
         method: 'DELETE',
+      }),
+  },
+
+  refunds: {
+    getAll: (params?: { status?: string; type?: string; demandId?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.status) query.append('status', params.status);
+      if (params?.type) query.append('type', params.type);
+      if (params?.demandId) query.append('demandId', params.demandId);
+      return request<Refund[]>(`/refunds${query.toString() ? `?${query.toString()}` : ''}`);
+    },
+    getById: (id: string) => request<any>(`/refunds/${id}`),
+    create: (data: Omit<Refund, 'id' | 'createdAt' | 'updatedAt'>) =>
+      request<Refund>('/refunds', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: Partial<Refund>) =>
+      request<Refund>(`/refunds/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      request<void>(`/refunds/${id}`, {
+        method: 'DELETE',
+      }),
+    approve: (id: string) =>
+      request<Refund>(`/refunds/${id}/approve`, {
+        method: 'POST',
+      }),
+    reject: (id: string, rejectReason: string) =>
+      request<Refund>(`/refunds/${id}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ rejectReason }),
+      }),
+    completeRefund: (id: string) =>
+      request<Refund>(`/refunds/${id}/complete-refund`, {
+        method: 'POST',
+      }),
+    receiveReturn: (id: string, receivedBy?: string) =>
+      request<Refund>(`/refunds/${id}/receive-return`, {
+        method: 'POST',
+        body: JSON.stringify({ receivedBy }),
       }),
   },
 };
